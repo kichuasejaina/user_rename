@@ -1,0 +1,50 @@
+- hosts: win
+  gather_facts: false
+  vars:
+    user_ansible: test_ansible
+    linux_worker: "168.0.0.100"
+  tasks:
+    - name: Do Setup
+      setup:
+
+    - name: Make Sure Temp directory exist
+      win_file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "C:\\temp\\{{ user_ansible }}\\scripts"
+        - "C:\\temp\\{{ user_ansible }}\\certs"
+
+    - name: Copying Creation Script to directory
+      win_template:
+        src: create_self_signed_cert.ps1.j2
+        dest: "C:\\temp\\{{ user_ansible }}\\scripts\\create_self_signed_cert.ps1"
+
+    - name: Executing Certificate Creation Script
+      win_shell: "powershell C:\\temp\\{{ user_ansible }}\\scripts\\create_self_signed_cert.ps1"
+      args:
+        creates: "C:\\temp\\{{ user_ansible }}\\certs\\cert.pem"
+
+    - name: Fetch Certificate to current dir
+      fetch:
+        src: "C:\\temp\\{{ user_ansible }}\\certs\\{{ item }}"
+        dest: "/home/autoadmin/user_rename/data"
+      loop:
+        - "cert.pem"
+        - "cert.pfx"
+
+    - name: Creating Personal Key
+      shell: 'openssl pkcs12 -in cert.pfx -nocerts -nodes -out cert_key.pem -passin pass: -passout pass:'
+      args:
+        chdir: "/home/autoadmin/user_rename/data/{{ item }}/C:/temp/{{ user_ansible }}/certs"
+      delegate_to: "{{ linux_worker }}"
+      loop: "{{ play_hosts }}"
+      run_once: true
+
+
+    - name: Cleanup
+      win_file:
+        path:  "C:\\temp\\{{ user_ansible }}"
+        state: absent
+
+

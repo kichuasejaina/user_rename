@@ -1,0 +1,62 @@
+- hosts: win
+  gather_facts: false
+  vars:
+    user_ansible: test_ansible
+  tasks:
+    - name: Do Setup
+      setup:
+
+    - name: Make Sure Temp directory exist
+      win_file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "C:\\temp\\{{ user_ansible }}\\scripts"
+        - "C:\\temp\\{{ user_ansible }}\\certs"
+
+
+    - name: Copy public key for thumbprint
+      win_copy:
+        src: "{{ new_certificate_pub_key_file }}"
+        dest: "C:\\temp\\{{ user_ansible }}\\certs\\cert.pem"
+
+
+    - name: Copy Powershell Script
+      win_template:
+        src: delete_client_cert_attachment.ps1.j2
+        dest: "C:\\temp\\{{ user_ansible }}\\scripts\\delete_client_cert_attachment.ps1"
+      vars:
+        cert_path: "C:\\temp\\{{ user_ansible }}\\certs\\cert.pem"
+
+    - name: Execute Powershell Script
+      win_shell: "powershell C:\\temp\\{{ user_ansible }}\\scripts\\delete_client_cert_attachment.ps1"
+
+
+    - name: Delete Certificates From Stores
+      win_certificate_store:
+        path: "C:\\temp\\{{ user_ansible }}\\certs\\cert.pem"
+        store_location: LocalMachine
+        store_name: "{{ item }}"
+        state: absent
+      loop:
+        - 'My'
+        - 'Root'
+        - 'TrustedPeople'
+        - 'CertificateAuthority'
+
+    - name: "Delete a profile for {{ user_ansible }}"
+      win_user_profile:
+        username: "{{ user_ansible }}"
+        state: absent
+
+    - name: "Delete User -- {{ user_ansible }}"
+      win_user:
+        fullname: "Ansible User"
+        groups: "Administrators"
+        name: "{{ user_ansible }}"
+        state: absent
+
+    - name: Cleanup
+      win_file:
+        path: "C:\\temp\\{{ user_ansible }}"
+        state: absent

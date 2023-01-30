@@ -1,0 +1,68 @@
+$username = "{{ user_ansible }}"
+$password = ConvertTo-SecureString -String "{{ __password_ansible }}" -AsPlainText -Force
+$credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $username, $password
+
+$cert_pub = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Certificate2 "{{ cert_path }}"
+
+$thumbprint = $cert_pub.Thumbprint
+
+$certs=Get-ChildItem -Path WSMan:\localhost\ClientCertificate
+foreach ($cert in $certs)
+{
+$_thumb_match=$false
+$_subject_match=$false
+foreach ($key in $cert.Keys)
+{
+if ($key -eq "Issuer=$thumbprint")
+{
+$_thumb_match=$true
+}
+if ($key -eq "Subject=$username@localhost")
+{
+$_subject_match=$true
+}
+}
+if ($_thumb_match -And $_subject_match)
+{
+$cert_target=Get-ChildItem -Path WSMan:\localhost\ClientCertificate | Where-Object {$_.PSPath -eq $cert.PSPath}
+$cert_name_to_remove=$cert_target.Name
+if ($cert_name_to_remove)
+{
+$remove_path = "WSMan:\localhost\ClientCertificate\$cert_name_to_remove"
+Remove-Item -Path $remove_path -Force -Recurse
+}
+}
+}
+
+
+New-Item -Path WSMan:\localhost\ClientCertificate `
+    -Subject "$username@localhost" `
+    -URI * `
+    -Issuer $thumbprint `
+    -Credential $credential -Force
+
+
+$certs=Get-ChildItem -Path WSMan:\localhost\ClientCertificate
+foreach ($cert in $certs)
+{
+$_thumb_match=$false
+$_subject_match=$false
+foreach ($key in $cert.Keys)
+{
+if ($key -eq "Issuer=$thumbprint")
+{
+$_thumb_match=$true
+}
+if ($key -eq "Subject=$username@localhost")
+{
+$_subject_match=$true
+}
+}
+if ($_thumb_match -And $_subject_match)
+{
+$target_cert=Get-ChildItem -Path WSMan:\localhost\ClientCertificate | Where-Object {$_.PSPath -eq $cert.PSPath}
+$cert_name=$target_cert.Name
+$enable_path="WSMan:\localhost\ClientCertificate\$cert_name\Enabled"
+Set-Item -Path $enable_path $true -Force
+}
+}
